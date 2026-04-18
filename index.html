@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Happy Birthday My Love</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { 
+    overflow: hidden; 
+    background: #000; 
+    width: 100%; 
+    height: 100%;
+    position: fixed;
+    top: 0; left: 0;
+  }
+  canvas { 
+    display: block; 
+    width: 100%; 
+    height: 100%;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+let W, H;
+let safeTop = 0, safeBottom = 0, safeLeft = 0, safeRight = 0;
+
+function getSafeAreaInsets() {
+  const style = getComputedStyle(document.documentElement);
+  safeTop = parseInt(style.getPropertyValue('--sat') || '0') || 0;
+  safeBottom = parseInt(style.getPropertyValue('--sab') || '0') || 0;
+  safeLeft = parseInt(style.getPropertyValue('--sal') || '0') || 0;
+  safeRight = parseInt(style.getPropertyValue('--sar') || '0') || 0;
+
+  const div = document.createElement('div');
+  div.style.position = 'fixed';
+  div.style.top = 'env(safe-area-inset-top)';
+  div.style.left = 'env(safe-area-inset-left)';
+  div.style.right = 'env(safe-area-inset-right)';
+  div.style.bottom = 'env(safe-area-inset-bottom)';
+  div.style.visibility = 'hidden';
+  document.body.appendChild(div);
+  const rect = div.getBoundingClientRect();
+  safeTop = rect.top > 0 ? rect.top : 50;
+  safeBottom = window.innerHeight - rect.bottom > 0 ? window.innerHeight - rect.bottom : 34;
+  safeLeft = rect.left > 0 ? rect.left : 0;
+  safeRight = window.innerWidth - rect.right > 0 ? window.innerWidth - rect.right : 0;
+  document.body.removeChild(div);
+
+  // Minimum safe areas for phones
+  if (safeTop < 20) safeTop = 50;
+  if (safeBottom < 10) safeBottom = 34;
+}
+
+function resize() {
+  const dpr = window.devicePixelRatio || 1;
+  W = window.innerWidth;
+  H = window.innerHeight;
+  canvas.width = W * dpr;
+  canvas.height = H * dpr;
+  canvas.style.width = W + 'px';
+  canvas.style.height = H + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  getSafeAreaInsets();
+}
+resize();
+window.addEventListener('resize', resize);
+
+function rand(a, b) { return Math.random() * (b - a) + a; }
+function hslColor(h, s, l, a) { return `hsla(${h},${s}%,${l}%,${a})`; }
+
+const pastelColors = [
+  [330, 80, 70], [270, 70, 65], [190, 90, 70],
+  [50, 90, 70], [0, 0, 95], [300, 60, 75], [210, 80, 75],
+];
+function randomPastel() { return pastelColors[Math.floor(Math.random() * pastelColors.length)]; }
+
+// Safe content area
+function safeContentTop() { return safeTop + 10; }
+function safeContentBottom() { return H - safeBottom - 10; }
+function safeContentLeft() { return safeLeft + 10; }
+function safeContentRight() { return W - safeRight - 10; }
+function safeCenterY() { return (safeContentTop() + safeContentBottom()) / 2; }
+function safeCenterX() { return (safeContentLeft() + safeContentRight()) / 2; }
+function safeWidth() { return safeContentRight() - safeContentLeft(); }
+function safeHeight() { return safeContentBottom() - safeContentTop(); }
+
+class Sparkle {
+  constructor(x, y, burst) {
+    this.x = x || rand(0, W);
+    this.y = y || rand(0, H);
+    this.vx = rand(-1, 1) * (burst ? 5 : 1.5);
+    this.vy = rand(-1, 1) * (burst ? 5 : 1.5) - (burst ? 2 : 0.5);
+    const c = randomPastel();
+    this.h = c[0]; this.s = c[1]; this.l = c[2];
+    this.size = rand(1, 3) * (burst ? 1.5 : 1);
+    this.life = 1;
+    this.decay = rand(0.01, 0.04) * (burst ? 4 : 1.5);
+    this.twinkle = rand(0, Math.PI * 2);
+    this.twinkleSpeed = rand(0.1, 0.3);
+  }
+  update() {
+    this.x += this.vx; this.y += this.vy;
+    this.life -= this.decay;
+    this.twinkle += this.twinkleSpeed;
+  }
+  draw() {
+    const alpha = this.life * (0.5 + 0.5 * Math.sin(this.twinkle));
+    if (alpha <= 0) return;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.shadowColor = hslColor(this.h, this.s, this.l, 1);
+    ctx.shadowBlur = 15;
+    ctx.fillStyle = hslColor(this.h, this.s, this.l, 1);
+    ctx.beginPath(); ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2); ctx.fill();
+    ctx.shadowBlur = 25; ctx.globalAlpha = alpha * 0.5;
+    ctx.beginPath(); ctx.arc(this.x, this.y, this.size * 0.5, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+  alive() { return this.life > 0; }
+}
+
+let sparkles = [];
+function spawnAmbientSparkles(count) { for (let i = 0; i < count; i++) sparkles.push(new Sparkle()); }
+function spawnBurstSparkles(x, y, count) { for (let i = 0; i < count; i++) sparkles.push(new Sparkle(x, y, true)); }
+
+class Heart {
+  constructor() {
+    this.x = rand(safeContentLeft(), safeContentRight());
+    this.y = H + rand(20, 60);
+    this.size = rand(8, 22);
+    this.speed = rand(1.2, 3.0);
+    this.drift = rand(-0.5, 0.5);
+    this.alpha = rand(0.3, 0.7);
+    this.h = rand(320, 350);
+    this.wobble = rand(0, Math.PI * 2);
+    this.wobbleSpeed = rand(0.03, 0.07);
+    this.wobbleAmp = rand(0.5, 1.5);
+  }
+  update() {
+    this.y -= this.speed;
+    this.wobble += this.wobbleSpeed;
+    this.x += this.drift + Math.sin(this.wobble) * this.wobbleAmp;
+    if (this.y < -50) this.alpha = 0;
+    if (this.y < safeContentTop()) this.alpha -= 0.015;
+  }
+  draw() {
+    if (this.alpha <= 0) return;
+    ctx.save();
+    ctx.globalAlpha = this.alpha;
+    ctx.fillStyle = hslColor(this.h, 80, 65, 1);
+    ctx.shadowColor = hslColor(this.h, 90, 60, 0.8);
+    ctx.shadowBlur = 20;
+    ctx.beginPath();
+    const s = this.size, cx = this.x, cy = this.y;
+    ctx.moveTo(cx, cy - s * 0.4);
+    ctx.bezierCurveTo(cx - s, cy - s * 1.2, cx - s * 1.4, cy + s * 0.2, cx, cy + s);
+    ctx.bezierCurveTo(cx + s * 1.4, cy + s * 0.2, cx + s, cy - s * 1.2, cx, cy - s * 0.4);
+    ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
+  alive() { return this.alpha > 0; }
+}
+
+let hearts = [];
+function spawnHeart() { hearts.push(new Heart()); }
+
+const MESSAGE = "HAPPY BIRTHDAY MY LOVE";
+
+class Letter {
+  constructor(char, index, totalLength) {
+    this.char = char; this.index = index; this.totalLength = totalLength;
+    this.x = 0; this.y = 0;
+    this.alpha = 0; this.scale = 0;
+    this.appeared = false; this.floating = false;
+    this.floatVY = 0; this.floatVX = 0;
+    this.rotation = 0; this.rotSpeed = 0;
+    this.h = ((index / totalLength) * 280 + 300) % 360;
+    this.s = 80; this.l = 75;
+    this.sparkleTimer = 0;
+  }
+  layout(x, y) { this.x = x; this.y = y; }
+  appear() { this.appeared = true; }
+  startFloat() {
+    this.floating = true;
+    this.floatVY = rand(-2.5, -5.0);
+    this.floatVX = rand(-1.2, 1.2);
+    this.rotSpeed = rand(-0.03, 0.03);
+  }
+  update(dt) {
+    if (this.appeared && !this.floating) {
+      this.alpha = Math.min(1, this.alpha + 0.12);
+      this.scale = Math.min(1, this.scale + 0.15);
+    }
+    if (this.floating) {
+      this.y += this.floatVY;
+      this.x += this.floatVX;
+      this.floatVX += rand(-0.02, 0.02);
+      this.rotation += this.rotSpeed;
+      this.alpha -= 0.008;
+      if (this.alpha < 0) this.alpha = 0;
+      this.sparkleTimer += dt;
+      if (this.sparkleTimer > 80 && this.alpha > 0.1) {
+        spawnBurstSparkles(this.x, this.y, 2);
+        this.sparkleTimer = 0;
+      }
+    }
+  }
+  draw() {
+    if (this.alpha <= 0 || !this.appeared) return;
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.rotate(this.rotation);
+    ctx.scale(this.scale, this.scale);
+    ctx.globalAlpha = this.alpha;
+    const fontSize = Math.min(safeWidth() * 0.07, 48);
+    ctx.font = `bold ${fontSize}px 'Segoe UI', Arial, sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = hslColor(this.h, this.s, this.l, 1);
+    ctx.shadowColor = hslColor(this.h, 90, 70, 0.9);
+    ctx.shadowBlur = 30;
+    ctx.fillText(this.char, 0, 0);
+    ctx.shadowBlur = 50; ctx.globalAlpha = this.alpha * 0.4;
+    ctx.fillText(this.char, 0, 0);
+    ctx.restore();
+  }
+}
+
+const STATE = { TYPING: 0, PAUSE: 1, FLOATING: 2, FADE_WAIT: 3 };
+let state, letters, currentLetterIndex, typeTimer, pauseTimer, floatTimer, floatIndex, fadeWaitTimer;
+const TYPE_INTERVAL = 60;
+const PAUSE_DURATION = 1000;
+const FLOAT_STAGGER = 40;
+const FADE_WAIT_DURATION = 1500;
+
+function initLetters() {
+  letters = []; currentLetterIndex = 0;
+  typeTimer = 0; pauseTimer = 0; floatTimer = 0; floatIndex = 0; fadeWaitTimer = 0;
+  state = STATE.TYPING;
+
+  const fontSize = Math.min(safeWidth() * 0.07, 48);
+  ctx.font = `bold ${fontSize}px 'Segoe UI', Arial, sans-serif`;
+
+  const words = MESSAGE.split(' ');
+  let lines = [], currentLine = '';
+  const maxWidth = safeWidth() * 0.9;
+
+  for (const word of words) {
+    const testLine = currentLine ? currentLine + ' ' + word : word;
+    if (ctx.measureText(testLine).width > maxWidth && currentLine) {
+      lines.push(currentLine); currentLine = word;
+    } else { currentLine = testLine; }
+  }
+  if (currentLine) lines.push(currentLine);
+
+  const lineHeight = fontSize * 1.4;
+  const totalHeight = lines.length * lineHeight;
+  const startY = safeCenterY() - totalHeight / 2 + lineHeight / 2;
+
+  let globalIndex = 0;
+  for (let l = 0; l < lines.length; l++) {
+    const line = lines[l];
+    const lineWidth = ctx.measureText(line).width;
+    const startX = safeCenterX() - lineWidth / 2;
+    let xOffset = 0;
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      const charWidth = ctx.measureText(char).width;
+      const letter = new Letter(char, globalIndex, MESSAGE.replace(/ /g, '').length);
+      letter.layout(startX + xOffset + charWidth / 2, startY + l * lineHeight);
+      letters.push(letter); xOffset += charWidth; globalIndex++;
+    }
+  }
+}
+initLetters();
+
+function drawBackground() {
+  const grad = ctx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, Math.max(W, H) * 0.8);
+  grad.addColorStop(0, 'rgba(25, 5, 40, 1)');
+  grad.addColorStop(0.5, 'rgba(12, 2, 25, 1)');
+  grad.addColorStop(1, 'rgba(0, 0, 5, 1)');
+  ctx.fillStyle = grad; ctx.fillRect(0, 0, W, H);
+}
+
+// Debug: draw safe area outline (remove in production)
+function drawSafeAreaDebug() {
+  // Uncomment to visualize safe area:
+  // ctx.save();
+  // ctx.strokeStyle = 'rgba(255,255,0,0.3)';
+  // ctx.lineWidth = 1;
+  // ctx.strokeRect(safeContentLeft(), safeContentTop(), safeWidth(), safeHeight());
+  // ctx.restore();
+}
+
+let lastTime = performance.now(), frameCount = 0, heartSpawnTimer = 0, sparkleSpawnTimer = 0;
+
+function loop(now) {
+  requestAnimationFrame(loop);
+  const dt = now - lastTime; lastTime = now; frameCount++;
+
+  ctx.fillStyle = 'rgba(5, 0, 15, 0.18)';
+  ctx.fillRect(0, 0, W, H);
+  if (frameCount % 120 === 0) drawBackground();
+
+  sparkleSpawnTimer += dt;
+  if (sparkleSpawnTimer > 30) { spawnAmbientSparkles(3); sparkleSpawnTimer = 0; }
+
+  heartSpawnTimer += dt;
+  if (heartSpawnTimer > 150) { spawnHeart(); heartSpawnTimer = 0; }
+
+  for (let i = sparkles.length - 1; i >= 0; i--) { sparkles[i].update(); if (!sparkles[i].alive()) sparkles.splice(i, 1); }
+  for (let i = hearts.length - 1; i >= 0; i--) { hearts[i].update(); if (!hearts[i].alive()) hearts.splice(i, 1); }
+
+  switch (state) {
+    case STATE.TYPING:
+      typeTimer += dt;
+      if (typeTimer >= TYPE_INTERVAL && currentLetterIndex < letters.length) {
+        const letter = letters[currentLetterIndex];
+        letter.appear();
+        if (letter.char !== ' ') spawnBurstSparkles(letter.x, letter.y, 10);
+        currentLetterIndex++; typeTimer = 0;
+      }
+      if (currentLetterIndex >= letters.length) state = STATE.PAUSE;
+      break;
+    case STATE.PAUSE:
+      pauseTimer += dt;
+      if (pauseTimer >= PAUSE_DURATION) state = STATE.FLOATING;
+      break;
+    case STATE.FLOATING:
+      floatTimer += dt;
+      if (floatTimer >= FLOAT_STAGGER && floatIndex < letters.length) {
+        letters[floatIndex].startFloat(); floatTimer = 0; floatIndex++;
+      }
+      let allGone = true;
+      for (const l of letters) { if (l.alpha > 0) { allGone = false; break; } }
+      if (allGone && floatIndex >= letters.length) state = STATE.FADE_WAIT;
+      break;
+    case STATE.FADE_WAIT:
+      fadeWaitTimer += dt;
+      if (fadeWaitTimer >= FADE_WAIT_DURATION) initLetters();
+      break;
+  }
+
+  for (const letter of letters) letter.update(dt);
+  for (const heart of hearts) heart.draw();
+  for (const sparkle of sparkles) sparkle.draw();
+  for (const letter of letters) letter.draw();
+
+  drawSafeAreaDebug();
+}
+
+drawBackground();
+spawnAmbientSparkles(60);
+for (let i = 0; i < 12; i++) { const h = new Heart(); h.y = rand(H * 0.1, H); hearts.push(h); }
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
